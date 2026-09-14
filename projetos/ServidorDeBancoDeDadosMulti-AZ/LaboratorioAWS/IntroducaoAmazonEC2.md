@@ -1,112 +1,135 @@
-# Projeto Prático: Ciclo de Vida, Monitoramento e Redimensionamento no Amazon EC2
+# Laboratório AWS: Criação e Integração de Servidor de Banco de Dados Multi-AZ com Aplicação Web
 
-Este projeto documenta o provisionamento, configuração de rede/segurança, automação via script de inicialização (User Data), monitoramento de integridade, redimensionamento de recursos computacionais/armazenamento e teste de proteção contra encerramento em uma instância Amazon EC2.
+Este repositório documenta a implementação de uma arquitetura resiliente na **AWS**, abrangendo a configuração de isolamento de rede para camada de dados (Security Groups e Subnet Groups), provisionamento de uma instância de banco de dados relacional **Amazon RDS (MySQL)** em implantação **Multi-AZ** e a integração prática com uma aplicação web conectada via Amazon EC2.
 
 ---
 
-## 🛠️ Tarefa 1: Iniciar sua instância do EC2
+## 🏗️ Visão Geral da Arquitetura
 
-1. No Console de Gerenciamento da AWS, no menu **Serviços**, selecione **EC2**.
-2. No painel de navegação da esquerda, selecione **Painel do EC2**.
-3. Clique em **Executar instância** e selecione **Executar instância**.
+- **VPC do Laboratório:** Rede virtual isolada (`Lab VPC`).
+- **Segurança de Rede:** Grupo de segurança dedicado (`DB Security Group`) liberando a porta MySQL (3306) exclusivamente a partir da camada web (`Web Security Group`).
+- **Subnet Group Multi-AZ:** Associação de duas sub-redes privadas em Zonas de Disponibilidade distintas para suporte a alta disponibilidade.
+- **Banco de Dados Relacional:** Amazon RDS (MySQL Community, classe `db.t3.medium`, Multi-AZ) com replicação síncrona.
+- **Aplicação Web:** Servidor Apache/PHP executando em instância EC2 (`Web Server 1`) consumindo o banco de dados RDS através de seu endpoint.
 
-### Etapa 1: Nomear sua instância do EC2
-- No painel **Name and tags**, na caixa de texto **Name**, digite: `Web Server`.
+---
 
-### Etapa 2: Selecionar uma imagem de máquina da Amazon (AMI)
-- No painel **Selecione uma imagem da aplicação ou do sistema operacional (Imagem de máquina da Amazon)**, mantenha a opção padrão **Amazon Linux 2023**.
+## 🛠️ Passo a Passo de Implementação
 
-### Etapa 3: Selecionar um tipo de instância
-- No menu suspenso de tipo de instância, selecione **t3.micro** (2 vCPUs e 1 GiB de memória).
+### 🔒 Tarefa 1: Criar um grupo de segurança para a instância de banco de dados do RDS
+O objetivo desta etapa foi criar um grupo de segurança para isolar o tráfego da camada de dados, permitindo que apenas servidores web autorizados se comuniquem com o banco.
 
-### Etapa 4: Configurar um par de chaves
-- No campo **Key pair (login)**, selecione **Proceed without a key pair (Not recommended)**.
+1. No **Console de Gerenciamento da AWS**, acesse o menu **Serviços** e escolha **VPC** (em *Redes e entrega de conteúdo*).
+2. No painel de navegação à esquerda, clique em **Grupos de segurança**.
+3. Clique em **Criar grupo de segurança** e configure:
+   - **Nome do grupo de segurança:** `DB Security Group`
+   - **Descrição:** `Permit access from Web Security Group`
+   - **VPC:** `Lab VPC (VPC do laboratório)`
+4. Na seção **Regras de entrada**, selecione **Adicionar regra**:
+   - **Tipo:** `MySQL/Aurora (3306)`
+   - **Origem:** Selecione `Web Security Group` (pesquise por `sg`)
+5. Role até o final da página e selecione **Criar grupo de segurança**.
 
-### Etapa 5: Definir as configurações de rede
-1. No painel **Configurações de rede**, selecione **Editar**.
-2. Em **VPC- required**, selecione **Lab VPC**.
-3. Configure o grupo de segurança:
-   - **Nome do grupo de segurança:** `Web Server security group`
-   - **Descrição:** `Security group for my web server`
-4. Em **Regras do grupo de segurança de entrada**, selecione **Remover** (removendo acesso SSH).
+> **Evidência da Tarefa 1:**
+> 
+> ![Regras de Entrada do DB Security Group]<img src="../img/tarefa1-db-security-group.png>
+> *Figura 1: DB Security Group configurado com regra de entrada TCP 3306 associada ao Web Security Group.*
 
-### Etapa 6: Adicionar armazenamento
-- No painel **Configure storage**, mantenha a configuração padrão de **8 GiB** (volume raiz Amazon EBS).
+---
 
-### Etapa 7: Configurar detalhes avançados
-1. Expanda o painel **Advanced details**.
-2. No menu suspenso **Termination protection**, selecione **Enable**.
-3. No campo **User data**, insira o seguinte script:
+### 🌐 Tarefa 2: Criar um grupo de sub-redes de banco de dados (DB Subnet Group)
+O DB Subnet Group define o conjunto de sub-redes (em pelo menos duas Zonas de Disponibilidade) onde a instância RDS e suas réplicas síncronas podem ser alocadas.
 
-```bash
-/bin/bash
-yum -y install httpd
-systemctl enable httpd
-systemctl start httpd
-echo '<html><h1>Hello From Your Web Server!</h1></html>' > /var/www/html/index.html  
-```
+1. No **Console de Gerenciamento da AWS**, selecione **Serviços** > **RDS** (em *Banco de dados*).
+2. No painel de navegação esquerdo, clique em **Grupos de sub-redes**.
+3. Clique em **Criar grupo de sub-redes de banco de dados** e configure:
+   - **Nome:** `DB Subnet Group`
+   - **Descrição:** `DB Subnet Group`
+   - **ID da VPC:** `Lab VPC (VPC do laboratório)`
+4. Na seção **Adicionar sub-redes para Zonas de disponibilidade**:
+   - Selecione a **primeira Zona de Disponibilidade** e marque a sub-rede `10.0.1.0/24`.
+   - Selecione a **segunda Zona de Disponibilidade** e marque a sub-rede `10.0.3.0/24`.
+5. Clique em **Criar**.
 
-### Etapa 8: Iniciar uma instância do EC2
-1. No painel direito, selecione Executar instância.
-2. Selecione Visualizar todas as instâncias.
-3. Marque a caixa de seleção ao lado de Web Server e acompanhe as guias Details, Security e Networking.
-4. Aguarde até que a instância apresente:
-    - **Estado da instância: Em execução**
-    - **Verificações de status:** 2/2 verificações aprovadas
-<!-- (Imagem painel EC2) -->
-<img src="./img/IntroducaoAmazonEC2/painelEC2.png" alt="imagen da captuda do console">
+> **Evidência da Tarefa 2:**
+> 
+> ![Grupo de Sub-redes Criado]<img src="../img/tarefa2-db-subnet-group.png">
+> *Figura 2: Grupo de sub-redes de banco de dados criado e concluído na Lab VPC.*
 
-## 📊 Tarefa 2: Monitorar a instância
-1. Selecione a instância Web Server e navegue até a guia Status checks para verificar se System reachability e Instance reachability foram aprovadas.
-2. Selecione a guia Monitoring para visualizar os gráficos de métricas do Amazon CloudWatch.
-3. No menu Ações, selecione Monitorar e solucionar problemas > Get Instance Screenshot.
-4. Visualize a captura da tela do console da instância e selecione Cancelar.
+---
 
-<!-- (Imagem painel EC2) --> 
-<img src="./img/IntroducaoAmazonEC2/Captura de tela 2026-08-16 175137.png" alt="imagen da captuda do console">
+### 🗄️ Tarefa 3: Criar uma instância de banco de dados do Amazon RDS (Multi-AZ)
+Nesta etapa foi criada a instância de banco de dados relacional com replicação síncrona de espera (*standby*) em outra AZ, garantindo alta disponibilidade e durabilidade.
 
-## 🌐 Tarefa 3: Atualizar o grupo de segurança e acessar o servidor web
-1. Na guia Details da instância, copie o Public IPv4 address.
-2. Abra uma nova guia no navegador e cole o endereço IP (o acesso falhará inicialmente, pois o grupo de segurança não permite a porta 80).
-3. Retorne ao EC2 Management Console e selecione Security Groups na seção Network & Security.
-4. Selecione Web Server security group e acesse a guia Inbound rules.
-5. Selecione Editar regras de entrada > Adicionar regra:
-    - Tipo: HTTP
-    - Origem: IPv4 em qualquer lugar
-6. Clique em Salvar regras.
+1. No painel esquerdo do console RDS, selecione **Bancos de dados** e clique em **Criar banco de dados** (*Criação padrão*).
+2. **Opções do mecanismo:**
+   - **Tipo de mecanismo:** `MySQL`
+   - **Versão do mecanismo:** Versão mais recente
+3. **Modelos:** `Dev/teste`
+4. **Disponibilidade e durabilidade:** `Instância de banco de dados Multi-AZ`
+5. **Configurações:**
+   - **Identificador de instância:** `lab-db`
+   - **Nome do usuário principal:** `main`
+   - **Senha principal:** `lab-password`
+   - **Confirmar senha:** `lab-password`
+6. **Configuração da instância:**
+   - **Classe:** Classes com capacidade de intermitência (`db.t3.medium`)
+7. **Armazenamento:**
+   - **Tipo de armazenamento:** Finalidade geral (SSD)
+8. **Conectividade:**
+   - **Nuvem privada virtual (VPC):** `Lab VPC`
+   - **Grupo de segurança da VPC:** Selecionar existente > Remover `default` > Adicionar `DB Security Group`
+9. **Monitoramento e Configuração adicional:**
+   - **Monitoramento aprimorado:** Marcar *Habilitar monitoramento avançado*
+   - **Nome do banco de dados inicial:** `lab`
+   - **Backup:** Desmarcar *Habilitar backups automatizados* (para fins de agilidade no laboratório)
+10. Clique em **Criar banco de dados** e aguarde até que o status mude para **Disponível**.
+11. Acesse os detalhes da instância `lab-db` e copie o valor do **Endpoint** (ex.: `lab-db.cqlce0ylmqlw.us-west-2.rds.amazonaws.com`).
 
-<!-- (Imagem Configuração da regra de entrada HTTP) -->
-<img src="./img/IntroducaoAmazonEC2/ConfiguraaooDaRegraDeEntradaHTTP.png" alt="Imagem Configuração da regra de entrada HTTP">
+> **Evidências da Tarefa 3:**
+> 
+> ![Instância RDS Multi-AZ Criada]<img src="../img/tarefa3-rds-database-list.png">
+> *Figura 3: Instância lab-db provisionada como Multi-AZ em status Disponível.*
+> 
+> ![Detalhes e Conectividade do RDS]<img src="../img/tarefa3-rds-conectividade.png">
+> *Figura 4: Endpoint e parâmetros de conectividade do banco de dados lab-db.*
 
-7. Volte à guia do servidor web e atualize a página para visualizar a mensagem: Hello From Your Web Server!.
+---
 
-<!-- (Imagem Página web exibindo a mensagem) -->
-<img src="./img/IntroducaoAmazonEC2/PaginaWebExibindoMensagem.png" alt="Imagem Página web exibindo a mensagem">
+### 💻 Tarefa 4: Interagir com o banco de dados através da aplicação web
+Com a infraestrutura de dados no ar, configuramos a aplicação web hospedada no EC2 para ler e persistir dados no RDS.
 
+1. Acesse o console do **Amazon EC2** e localize a instância `Web Server 1`.
+2. Obtenha o endereço **IPv4 público** da instância (ex.: `54.213.149.253`).
+3. Abra uma nova aba no navegador web e acesse o IP público copiado.
+4. Na barra de navegação superior da aplicação web, selecione a opção **RDS**.
+5. Preencha o formulário de conexão com os parâmetros definidos:
+   - **Endpoint:** `<Endpoint_RDS_copiado>`
+   - **Database:** `lab`
+   - **Username:** `main`
+   - **Password:** `lab-password`
+6. Clique em **Submit**.
+7. Após a inicialização das tabelas pelo script da aplicação, a página do **Address Book** (Catálogo de endereços) será exibida.
+8. Teste as operações de CRUD inserindo, editando e removendo contatos (os dados são automaticamente replicados para a segunda Zona de Disponibilidade).
 
-## ⚙️ Tarefa 4: Redimensionar a instância: tipo de instância e volume do EBS
+> **Evidências da Tarefa 4:**
+> 
+> ![Instância EC2 Web Server 1]<img src="../img/tarefa4-ec2-webserver.png">
+> *Figura 5: Instância EC2 Web Server 1 em execução com IP público atribuído.*
+> 
+> ![Aplicação Web EC2]<img src="../img/tarefa4-app-web-index.png">
+> *Figura 6: Painel inicial da aplicação web.*
+> 
+> ![Configuração de Conexão RDS] <img src="../img/tarefa4-app-rds-config.png">
+> *Figura 7: Formulário de conexão da aplicação apontando para o endpoint do RDS lab-db.*
+> 
+> ![Address Book Conectado] <img src="../img/tarefa4-address-book-sucesso.png">  
+> *Figura 8: Aplicação Address Book persistindo e listando dados gravados no Amazon RDS Multi-AZ.*S
 
-### Interromper a instância
-1. No painel Instances, com o Web Server selecionado, vá em Estado da instância > Interromper instância.
-2. Selecione Interromper e aguarde o estado mudar para Stopped.
+---
 
-### Alterar o tipo de instância
-1. No menu Ações, selecione Configurações de instância > Alterar tipo de instância.
-2. Selecione o tipo t3.small e clique em Alterar tipo de instância.
+## 🎯 Conclusão e Resultados
 
-### Redimensionar o volume do EBS
-1. No menu à esquerda, acesse Volumes (em Elastic Block Store).
-2. Selecione o volume, vá em Ações > Modificar volume.
-3. Altere o tamanho de 8 para 10 GiB e selecione Modificar (confirme a alteração).
-
-### Iniciar a instância redimensionada
-1. Retorne a Instâncias, selecione Web Server e vá em Estado da instância > Iniciar instâncias.
-
-## Tarefa 5: Testar a proteção contra encerramento
-1. No painel Instâncias, selecione Web Server, clique em Estado da instância e selecione Encerrar (excluir) instância.
-    - Clique no botão Encerrar.
-    - Observe a mensagem de erro vermelha indicando: Falha ao terminar uma instância... devido à proteção contra encerramento ativa.
-
-2. No menu Ações, selecione Configurações de instância > Change termination protection.
-    - Desmarque a opção Enable e clique em Save.
-    - No menu Ações, selecione Estado da instância > Terminate instance e confirme clicando em Encerrar.
+- **Segurança em camadas (Defense in Depth):** O banco de dados foi isolado em sub-redes privadas sem exposição pública direta, aceitando conexões exclusivamente originadas da camada web via Security Group[cite: 1].
+- **Alta Disponibilidade:** Com o RDS Multi-AZ, os dados são gravados sincronicamente entre zonas de disponibilidade, aumentando a tolerância a falhas[cite: 1].
+- **Integração Ponta a Ponta:** Demonstração prática do ciclo completo de configuração de conectividade entre servidores de aplicação e bancos de dados relacionais gerenciados na nuvem AWS[cite: 1].
