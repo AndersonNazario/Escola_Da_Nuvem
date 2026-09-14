@@ -130,6 +130,6 @@ Com a infraestrutura de dados no ar, configuramos a aplicação web hospedada no
 
 ## 🎯 Conclusão e Resultados
 
-- **Segurança em camadas (Defense in Depth):** O banco de dados foi isolado em sub-redes privadas sem exposição pública direta, aceitando conexões exclusivamente originadas da camada web via Security Group[cite: 1].
-- **Alta Disponibilidade:** Com o RDS Multi-AZ, os dados são gravados sincronicamente entre zonas de disponibilidade, aumentando a tolerância a falhas[cite: 1].
-- **Integração Ponta a Ponta:** Demonstração prática do ciclo completo de configuração de conectividade entre servidores de aplicação e bancos de dados relacionais gerenciados na nuvem AWS[cite: 1].
+- **Segurança em camadas (Defense in Depth):** O banco de dados foi isolado em sub-redes privadas sem exposição pública direta, aceitando conexões exclusivamente originadas da camada web via Security Group.
+- **Alta Disponibilidade:** Com o RDS Multi-AZ, os dados são gravados sincronicamente entre zonas de disponibilidade, aumentando a tolerância a falhas.
+- **Integração Ponta a Ponta:** Demonstração prática do ciclo completo de configuração de conectividade entre servidores de aplicação e bancos de dados relacionais gerenciados na nuvem AWS.
